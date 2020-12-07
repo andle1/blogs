@@ -34,7 +34,9 @@ final float loadFactor;
 
 
 
-![这里写图片描述](20160407175503308)
+![在这里插入图片描述](20160407175503308.png)
+
+
 
 #### 约定
 
@@ -46,15 +48,15 @@ final float loadFactor;
 
 ​		当好多bin被映射到同一个桶时，如果这个桶中bin的数量小于 TREEIFY_THRESHOLD 当然不会转化成树形结构存储；如果这个桶中bin的数量大于了 `TREEIFY_THRESHOLD` ，但是capacity小于`MIN_TREEIFY_CAPACITY` 则依然使用链表结构进行存储，此时会对HashMap进行扩容；如果capacity大于了`MIN_TREEIFY_CAPACITY` ，则会进行树化。
 
-
-
-###### putVal() 方法流程：
-
-![在这里插入图片描述](20200614000452317.png)
+****
 
 
 
-###### putVal 源码：
+
+
+
+
+#### putVal 源码：
 
 ```java
 final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
@@ -105,7 +107,11 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
 
 
 
-###### resize() :
+#### resize() :
+
+https://blog.csdn.net/weixin_41565013/article/details/93190786
+
+https://blog.csdn.net/qq_40574571/article/details/97612100
 
 ```java
 final Node<K,V>[] resize() {
@@ -144,25 +150,27 @@ final Node<K,V>[] resize() {
         if (oldTab != null) {
             for (int j = 0; j < oldCap; ++j) {
                 Node<K,V> e;
-                // 遍历数组
+                // 遍历数组，把之前的桶移到新的桶中
                 if ((e = oldTab[j]) != null) {
                     oldTab[j] = null;
-                    // 很单纯的节点，直接往新数组后面添加就行
+                    // 很单纯的数组元素（即链表不存在后续节点），直接往新数组后面添加就行
                     if (e.next == null)
                         newTab[e.hash & (newCap - 1)] = e;
                     else if (e instanceof TreeNode)
                         // 树
                         ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
                     else { 
-   			   /*链表*/
-                        // 数组低位链表的首尾节点
+   			   /*桶中为链表，对链表进行拆分*/
+			/*拆分成两个链表*/
                         Node<K,V> loHead = null, loTail = null;
-                        // 数组高位链表的首尾节点
                         Node<K,V> hiHead = null, hiTail = null;
+                        // 链表的下一元素
                         Node<K,V> next;
                         do {
                             next = e.next;
+                           // 选择出扩容后在同一个桶中的节点。
                             if ((e.hash & oldCap) == 0) {
+                                // 尾节点为空，说明 lo 链表为空
                                 if (loTail == null)
                                     loHead = e;
                                 else
@@ -176,13 +184,16 @@ final Node<K,V>[] resize() {
                                     hiTail.next = e;
                                 hiTail = e;
                             }
-                        } while ((e = next) != null);
+                        } while ((e = next) != null); // 循环遍历链表元素，构建两个链表
+                        // 解释了之前为什么需要把尾节点为空的赋值为e
                         if (loTail != null) {
+                            // 把上次用作标记尾节点的节点去除。
                             loTail.next = null;
                             newTab[j] = loHead;
                         }
                         if (hiTail != null) {
                             hiTail.next = null;
+                            // 新节点的位置是现在的位置加之前 table 长度的。因为是2次幂的扩展。
                             newTab[j + oldCap] = hiHead;
                         }
                     }
@@ -193,3 +204,28 @@ final Node<K,V>[] resize() {
     }
 ```
 
+###### 扩容位置变化分析：
+
+https://blog.csdn.net/qq_40574571/article/details/97612100
+
+​		jdk1.8 使用的是2次幂的扩展(指长度扩为原来2倍)，所以，元素的位置要么是在原位置，要么是在原位置再移动2次幂的位置。看下图可以明白这句话的意思，n为table的长度，图（a）表示扩容前的key1和key2两种key确定索引位置的示例，图（b）表示扩容后key1和key2两种key确定索引位置的示例，其中hash1是key1对应的哈希与高位运算结果。扩容一倍，左移一位，故新的 n-1 位是之前  n-1 左移动一位。
+
+![img](20190728110949685.png)
+
+​		元素在重新计算hash之后，因为n变为2倍，那么n-1的mask范围在高位多1bit(红色)，因此新的index就会发生这样的变化：
+
+![在这里插入图片描述](20190728111006889.png)
+
+​		因此，我们在扩充HashMap的时候，不需要像JDK1.7的实现那样重新计算hash，只需要看看原来的hash值新增的那个bit是1还是0就好了，是0的话索引没变，是1的话索引变成“原索引+oldCap”，可以看看下图为16扩充为32的resize示意图：
+
+![img](2019072811103759.png)
+
+
+
+###### e.hash & oldCap == 0 算法：
+
+https://blog.csdn.net/u010425839/article/details/106620440/
+
+![img](20200608155000351.png)
+
+简单的说，存的是 e.hash & (oldCap - 1),这时候是位置，而 e.hash & oldCap 时，因为 oldCap 的长度是2的n次幂整数，所以计算结果肯定是0.这里关注 e.hash 的值。
