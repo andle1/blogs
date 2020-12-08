@@ -50,11 +50,24 @@ final float loadFactor;
 
 ****
 
+#### put 源码：
 
+```java
+ public V put(K key, V value) {
+        return putVal(hash(key), key, value, false, true);
+    }
+```
 
+###### hash()
 
+```java
+static final int hash(Object key) {
+        int h;
+        return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+    }
+```
 
-
+***
 
 #### putVal 源码：
 
@@ -65,24 +78,26 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
        // 空表则初始化
         if ((tab = table) == null || (n = tab.length) == 0)
             n = (tab = resize()).length;
-       //非空表且没有碰撞，则直接插入元素到散列表中
+       //非空表且没有碰撞，则直接插入元素到散列表中。这就相当于放入桶中第一个位置。
         if ((p = tab[i = (n - 1) & hash]) == null)
             tab[i] = newNode(hash, key, value, null);
         else {
             Node<K,V> e; K k;
             if (p.hash == hash &&
-                ((k = p.key) == key || (key != null && key.equals(k))))
+                ((k = p.key) == key || (key != null && key.equals(k)))) // 节点的key存在，则覆盖原value值。
                 e = p;
-            else if (p instanceof TreeNode)
+            else if (p instanceof TreeNode) // 树节点，红黑树
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
-            else {
+            else { // 链表
                 for (int binCount = 0; ; ++binCount) {
                     if ((e = p.next) == null) {
                         p.next = newNode(hash, key, value, null);
-                        if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
-                            treeifyBin(tab, hash);
+// 当binCount=7时，此时p指向的应该是链表的第8个节点，e = p.next指向第9个节点。
+                        if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st 
+                            treeifyBin(tab, hash); //链表长度大于8转换为红黑树进行处理
                         break;
                     }
+                     // key已经存在直接覆盖value
                     if (e.hash == hash &&
                         ((k = e.key) == key || (key != null && key.equals(k))))
                         break;
@@ -98,14 +113,62 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
             }
         }
         ++modCount;
-        if (++size > threshold)
+        if (++size > threshold) // 超过最大容量，扩容
             resize();
         afterNodeInsertion(evict);
         return null;
     }
 ```
 
+ n = (tab = resize()).length;
 
+#### (n - 1) & hash 意义：
+
+​	**HashMap**是“数组+链表”的结构，为了让**HashMap**里的元素分布的更加均匀，就要在数组中给每个元素一个合适的位置，求模运算是一个不错的方法。
+
+> ###### 取模：一个数n 除以p 等于m和余数  n / p =m ······ r
+>
+> ##### 这个余数的范围是 [0,p)  
+>
+> ##### 意义：假如我们想在一个数你中得到[0,p]范围  就用n%p 得到的结果是就是在[0，p]这样一个范围
+>
+> ##### 53%18    就是53除以18 得到一个整数还有一个余数  这个余数的范围一定在[0,18]之间
+
+
+
+```java
+方法一：jdk 1.8 源码
+static final int hash(Object key) {   //jdk1.8 & jdk1.7
+     int h;
+     // h = key.hashCode() 为第一步 取hashCode值
+     // h ^ (h >>> 16)  为第二步 高位参与运算
+     return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+}
+方法二：
+static int indexFor(int h, int length) {  //jdk1.7的源码，jdk1.8没有这个方法，但是实现原理一样的
+     return h & (length-1);  //第三步 取模运算
+}	
+```
+
+这里的Hash算法本质上就是三步：取key的hashCode值、高位运算、取模运算。
+
+​		对于任意给定的对象，只要它的hashCode()返回值相同，那么程序调用方法一所计算得到的Hash码值总是相同的。我们首先想到的就是把hash值对数组长度取模运算，这样一来，元素的分布相对来说是比较均匀的。但是，模运算的消耗还是比较大的，在HashMap中是这样做的：调用方法二来计算该对象应该保存在table数组的哪个索引处。
+
+​		这个方法非常巧妙，它通过h & (table.length  -1)来得到该对象的保存位，而HashMap底层数组的长度总是2的n次方，这是HashMap在速度上的优化。`当length总是2的n次方时，h& (length-1)运算等价于对length取模，也就是h%length，但是&比%具有更高的效率`。
+
+​		在JDK1.8的实现中，优化了高位运算的算法，通过hashCode()的高16位异或低16位实现的：(h = k.hashCode()) ^ (h >>>  16)，主要是从速度、功效、质量来考虑的，这么做可以在数组table的length比较小的时候，也能保证考虑到高低Bit都参与到Hash的计算中，同时不会有太大的开销。
+
+n为table的长度：
+
+![在这里插入图片描述](20190728105806594.png)
+
+
+
+###### h& (length-1)运算等价于对length取模 原因：
+
+​		这里有一个前提，**length**是一个**2**的幂次方整数（这也就解释了为什么扩容的时候，是按 2的幂次方整数扩容），这样，**length-1** 的二进制就是一个形如“0000111...”的数，比如，如果**length=4**，**length-1=3**，其二进制表示为“**0011**”，如果**length=8**，**length-1=7**，其二进制表示为“**0111**”，以此类推。将**h**和**length-1**进行按位与运算的时候，由于高位都是**0**，只有低位的**1**才能决定最终的结果，就相当于对**h**进行相应数值（即**length**）的求模运算。
+
+****
 
 #### resize() :
 
@@ -204,7 +267,8 @@ final Node<K,V>[] resize() {
     }
 ```
 
-###### 扩容位置变化分析：
+- ###### 扩容位置变化分析：
+
 
 https://blog.csdn.net/qq_40574571/article/details/97612100
 
@@ -222,10 +286,29 @@ https://blog.csdn.net/qq_40574571/article/details/97612100
 
 
 
-###### e.hash & oldCap == 0 算法：
+- ###### e.hash & oldCap == 0 算法：
+
 
 https://blog.csdn.net/u010425839/article/details/106620440/
 
 ![img](20200608155000351.png)
 
 简单的说，存的是 e.hash & (oldCap - 1),这时候是位置，而 e.hash & oldCap 时，因为 oldCap 的长度是2的n次幂整数，所以计算结果肯定是0.这里关注 e.hash 的值。
+
+****
+
+#### putTreeVal()
+
+(红黑树)
+
+2-3 树
+
+https://zhuanlan.zhihu.com/p/104031183
+
+红黑树
+
+https://www.cnblogs.com/shianliang/p/9233117.html
+
+putTreeVal()  方法
+
+https://www.cnblogs.com/shianliang/p/9233024.html
