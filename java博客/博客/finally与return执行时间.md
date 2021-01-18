@@ -305,10 +305,10 @@ public class Test {
             if (b > 25) {
                 System.out.println("b>25, b = " + b);
             }
-            b += 50;  //这里的 b+=50 并没有执行，因为返回的是 204
+            b += 50;
         }
 
-        return 204;
+        return b;
     }
 }
 ```
@@ -319,7 +319,7 @@ public class Test {
 catch block
 finally block
 b>25, b = 35
-204
+85
 ```
 
 

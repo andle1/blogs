@@ -80,6 +80,7 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
             n = (tab = resize()).length;
        //非空表且没有碰撞，则直接插入元素到散列表中。这就相当于放入桶中第一个位置。
         if ((p = tab[i = (n - 1) & hash]) == null)
+            // 此位置数组没有元素，放入元素
             tab[i] = newNode(hash, key, value, null);
         else {
             Node<K,V> e; K k;
@@ -156,7 +157,7 @@ static int indexFor(int h, int length) {  //jdk1.7的源码，jdk1.8没有这个
 
 ​		这个方法非常巧妙，它通过h & (table.length  -1)来得到该对象的保存位，而HashMap底层数组的长度总是2的n次方，这是HashMap在速度上的优化。`当length总是2的n次方时，h& (length-1)运算等价于对length取模，也就是h%length，但是&比%具有更高的效率`。
 
-​		在JDK1.8的实现中，优化了高位运算的算法，通过hashCode()的高16位异或低16位实现的：(h = k.hashCode()) ^ (h >>>  16)，主要是从速度、功效、质量来考虑的，这么做可以在数组table的length比较小的时候，也能保证考虑到高低Bit都参与到Hash的计算中，同时不会有太大的开销。
+​		在JDK1.8的实现中，优化了高位运算的算法，通过hashCode()的高16位异或低16位实现的：(h = k.hashCode()) ^ (h >>>  16)（逻辑右移16位），主要是从速度、功效、质量来考虑的，这么做可以在数组table的length比较小的时候，也能保证考虑到高低Bit都参与到Hash的计算中，同时不会有太大的开销。
 
 n为table的长度：
 
@@ -215,7 +216,7 @@ final Node<K,V>[] resize() {
                 Node<K,V> e;
                 // 遍历数组，把之前的桶移到新的桶中
                 if ((e = oldTab[j]) != null) {
-                    oldTab[j] = null;
+                    oldTab[j] = null; // 置空原数组元素（）
                     // 很单纯的数组元素（即链表不存在后续节点），直接往新数组后面添加就行
                     if (e.next == null)
                         newTab[e.hash & (newCap - 1)] = e;
@@ -248,7 +249,7 @@ final Node<K,V>[] resize() {
                                 hiTail = e;
                             }
                         } while ((e = next) != null); // 循环遍历链表元素，构建两个链表
-                        // 解释了之前为什么需要把尾节点为空的赋值为e
+                        // 不是空的桶
                         if (loTail != null) {
                             // 把上次用作标记尾节点的节点去除。
                             loTail.next = null;
@@ -280,7 +281,7 @@ https://blog.csdn.net/qq_40574571/article/details/97612100
 
 ![在这里插入图片描述](20190728111006889.png)
 
-​		因此，我们在扩充HashMap的时候，不需要像JDK1.7的实现那样重新计算hash，只需要看看原来的hash值新增的那个bit是1还是0就好了，是0的话索引没变，是1的话索引变成“原索引+oldCap”，可以看看下图为16扩充为32的resize示意图：
+​		因此，我们在扩充HashMap的时候，不需要像JDK1.7的实现那样重新计算hash，只需要看看原来的hash值新增的那个bit是1还是0就好了(这里就解释了 e.hash & oldCap == 0，这个长度就是新增的bit，因为原位置为 oldCap - 1，因为是2的次方，所以这里 oldCap 表示的是新增的bit位，结果为0，位置不变)，是0的话索引没变，是1的话索引变成“原索引+oldCap”，可以看看下图为16扩充为32的resize示意图：
 
 ![img](2019072811103759.png)
 
@@ -293,22 +294,14 @@ https://blog.csdn.net/u010425839/article/details/106620440/
 
 ![img](20200608155000351.png)
 
-简单的说，存的是 e.hash & (oldCap - 1),这时候是位置，而 e.hash & oldCap 时，因为 oldCap 的长度是2的n次幂整数，所以计算结果肯定是0.这里关注 e.hash 的值。
-
 ****
 
 #### putTreeVal()
 
-(红黑树)
+红黑树可以看作是23树的2节点变为红色节点。
 
-2-3 树
+2-3 树： https://zhuanlan.zhihu.com/p/104031183
 
-https://zhuanlan.zhihu.com/p/104031183
+红黑树： https://www.cnblogs.com/shianliang/p/9233117.html
 
-红黑树
-
-https://www.cnblogs.com/shianliang/p/9233117.html
-
-putTreeVal()  方法
-
-https://www.cnblogs.com/shianliang/p/9233024.html
+putTreeVal()  方法： https://www.cnblogs.com/shianliang/p/9233024.html
