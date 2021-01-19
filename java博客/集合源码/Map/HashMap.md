@@ -1,8 +1,14 @@
+
+
+![在这里插入图片描述](2020061400051147.jpeg)
+
+
+
 https://blog.csdn.net/weixin_45690436/article/details/109768120
 
 https://blog.csdn.net/weixin_40413961/article/details/106740423
 
-属性：
+字段：
 
 ```java
 初始容量 16 （这里是桶的数量）
@@ -50,7 +56,7 @@ final float loadFactor;
 
 ****
 
-#### put 源码：
+#### put 方法：
 
 ```java
  public V put(K key, V value) {
@@ -67,9 +73,13 @@ static final int hash(Object key) {
     }
 ```
 
+​		将**key**的哈希值的⾼位也做了运算**(**与⾼**16**位做异或运算，使得在做**&**运算时，此时的低位实际上是⾼位与低位的结合**)**，这就增加了随机性，减少了碰撞冲突的可能性
+
 ***
 
-#### putVal 源码：
+#### putVal 方法：
+
+key 的hash 值相同不意味着key值相同。
 
 ```java
 final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
@@ -93,12 +103,12 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                 for (int binCount = 0; ; ++binCount) {
                     if ((e = p.next) == null) {
                         p.next = newNode(hash, key, value, null);
-// 当binCount=7时，此时p指向的应该是链表的第8个节点，e = p.next指向第9个节点。
+                        //binCount=0时。p所指向的仍然是table[(n - 1) & hash]，即链表的第一个节点，只是e = p.next指向链表的第二个节点。当binCount=7时，此时p指向的应该是链表的第8个节点，e = p.next指向第9个节点。由于 p.next =newNode(hash, key, value, null);此时的链表长度应该为9。而链表为9只是暂时存在的，之后就变为红黑树了
                         if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st 
                             treeifyBin(tab, hash); //链表长度大于8转换为红黑树进行处理
                         break;
                     }
-                     // key已经存在直接覆盖value
+                     // key已经存在直接覆盖value。覆盖的是 p.next
                     if (e.hash == hash &&
                         ((k = e.key) == key || (key != null && key.equals(k))))
                         break;
@@ -107,8 +117,11 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
             }
             if (e != null) { // existing mapping for key
                 V oldValue = e.value;
+//                onlyIfAbsent  如果当前位置已存在一个值，是否替换，false是替换，true是不替换
                 if (!onlyIfAbsent || oldValue == null)
+                    // 覆盖
                     e.value = value;
+                //访问后回调
                 afterNodeAccess(e);
                 return oldValue;
             }
@@ -116,10 +129,17 @@ final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
         ++modCount;
         if (++size > threshold) // 超过最大容量，扩容
             resize();
+      //插入后回调
         afterNodeInsertion(evict);
         return null;
     }
 ```
+
+流程图：
+
+![在这里插入图片描述](20200524013605390.png)
+
+
 
  n = (tab = resize()).length;
 
